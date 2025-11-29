@@ -12,6 +12,7 @@ export default function Home() {
   const [adminKey, setAdminKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
     const savedKey = localStorage.getItem('adminKey');
@@ -25,12 +26,15 @@ export default function Home() {
 
   const verifyAndLogin = async (key) => {
     try {
-      await axios.get(`${API_URL}/api/config`, {
+      const response = await axios.get(`${API_URL}/api/config`, {
         headers: { Authorization: `Bearer ${key}` }
       });
+      console.log('Auth success:', response.data);
       setIsLoggedIn(true);
       setLoading(false);
     } catch (err) {
+      console.error('Auth failed:', err);
+      setDebugInfo(`Error: ${err.message} - ${err.response?.status} - ${err.response?.data?.error}`);
       localStorage.removeItem('adminKey');
       setLoading(false);
     }
@@ -39,18 +43,35 @@ export default function Home() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setDebugInfo('');
     setLoading(true);
 
+    console.log('Attempting login with key:', adminKey);
+    console.log('API URL:', API_URL);
+
     try {
-      await axios.get(`${API_URL}/api/config`, {
+      const response = await axios.get(`${API_URL}/api/config`, {
         headers: { Authorization: `Bearer ${adminKey}` }
       });
       
+      console.log('Login successful:', response.data);
       localStorage.setItem('adminKey', adminKey);
       setIsLoggedIn(true);
       setLoading(false);
     } catch (err) {
-      setError('Invalid admin key');
+      console.error('Login error:', err);
+      console.error('Response:', err.response);
+      
+      if (err.code === 'ERR_NETWORK') {
+        setError('Cannot connect to API server. Check if backend is running.');
+        setDebugInfo('Network error - CORS or server offline');
+      } else if (err.response?.status === 401) {
+        setError('Invalid admin key');
+        setDebugInfo(`Server says: ${err.response.data.error}`);
+      } else {
+        setError(`Error: ${err.message}`);
+        setDebugInfo(`Status: ${err.response?.status}, Details: ${JSON.stringify(err.response?.data)}`);
+      }
       setLoading(false);
     }
   };
@@ -59,7 +80,7 @@ export default function Home() {
     router.push('/feeds');
   };
 
-  if (loading) {
+  if (loading && !debugInfo) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading...</div>
@@ -74,6 +95,13 @@ export default function Home() {
           <h1 className="text-3xl font-bold text-white mb-6 text-center">
             DayZ Bot Dashboard
           </h1>
+          
+          {/* Debug Info */}
+          <div className="mb-4 p-3 bg-blue-500/20 border border-blue-500 rounded text-blue-200 text-xs">
+            <div>API: {API_URL}</div>
+            <div>Endpoint: /api/config</div>
+          </div>
+
           <form onSubmit={handleLogin}>
             <div className="mb-4">
               <label className="block text-gray-300 mb-2 font-semibold">Admin Key</label>
@@ -86,11 +114,19 @@ export default function Home() {
                 required
               />
             </div>
+
             {error && (
               <div className="mb-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-200">
                 {error}
               </div>
             )}
+
+            {debugInfo && (
+              <div className="mb-4 p-3 bg-yellow-500/20 border border-yellow-500 rounded text-yellow-200 text-xs">
+                {debugInfo}
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -99,6 +135,21 @@ export default function Home() {
               {loading ? 'Logging in...' : 'Login'}
             </button>
           </form>
+
+          {/* Quick Test Button */}
+          <button
+            onClick={async () => {
+              try {
+                const res = await axios.get(`${API_URL}/api/stats`);
+                alert('API is reachable! Stats: ' + JSON.stringify(res.data).substring(0, 100));
+              } catch (err) {
+                alert('API test failed: ' + err.message);
+              }
+            }}
+            className="w-full mt-3 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded text-sm"
+          >
+            Test API Connection
+          </button>
         </div>
       </div>
     );
